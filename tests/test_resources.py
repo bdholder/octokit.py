@@ -50,5 +50,15 @@ class TestResources(unittest.TestCase):
             response = method('foo')
             assert response.success
 
+    def test_ensure_schema_loaded_exception(self):
+        """Test that ensure_schema_loaded raises correct exception."""
+        client = octokit.Client()
+        try:
+            #.id necessary to force accessing resource
+            client.user.id
+        except Exception as e:
+            self.assertNotIsInstance(e, NameError)
+            self.assertEqual(e.args[0], "You need to call this resource with variables ['user']")
+
 if __name__ == '__main__':
     unittest.main()

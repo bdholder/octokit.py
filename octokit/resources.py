@@ -74,7 +74,9 @@ class Resource(object):
         """Check if resources' schema has been loaded, otherwise load it"""
         if self.schema:
             return
-        elif self.variables():
+
+        variables = self.variables()
+        if variables:
             raise Exception("You need to call this resource with variables %s"
                             % repr(list(variables)))
 
