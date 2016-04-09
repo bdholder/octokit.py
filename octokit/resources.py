@@ -21,7 +21,7 @@ class Resource(object):
     def __init__(self, session, name=None, url=None, schema=None,
                  response=None):
         self.session = session
-        self.name = name
+        self._name = name
         self.url = url
         self.schema = schema
         self.response = response
@@ -59,7 +59,7 @@ class Resource(object):
         else:
             subtitle = str(self.schema)
 
-        return '<Octokit %s(%s)>' % (self.name, subtitle)
+        return '<Octokit %s(%s)>' % (self._name, subtitle)
 
     def variables(self):
         """Returns the variables the URI takes"""
@@ -89,7 +89,7 @@ class Resource(object):
         if data_type == dict:
             schema = self.parse_schema_dict(response)
         elif data_type == list:
-            schema = self.parse_schema_list(response, self.name)
+            schema = self.parse_schema_list(response, self._name)
         else:
             # TODO (eduardo) -- handle request that don't return anything
             raise Exception("Unknown type of response from the API.")
@@ -129,7 +129,7 @@ class Resource(object):
     def parse_rels(self, response):
         """Parse relation links from the headers"""
         return {
-          link['rel']: Resource(self.session, url=link['url'], name=self.name)
+          link['rel']: Resource(self.session, url=link['url'], name=self._name)
           for link in response.links.values()
         }
 
@@ -181,4 +181,4 @@ class Resource(object):
         response = self.session.send(prepared_req)
 
         return Resource(self.session, response=response,
-                        name=humanize(self.name))
+                        name=humanize(self._name))

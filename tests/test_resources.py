@@ -60,5 +60,17 @@ class TestResources(unittest.TestCase):
             self.assertNotIsInstance(e, NameError)
             self.assertEqual(e.args[0], "You need to call this resource with variables ['user']")
 
+    def test_schema_key_aliasing(self):
+        """Test Resource whether attributes alias schema keys."""
+        try:
+            self.client.name
+            self.assertTrue(False, msg="No exception raised when accessing Client.name")
+        except Exception as e:
+            self.assertEqual(e.args[0], "You need to call this resource with variables ['param']")
+
+        schema = {'name': 'octocat'}
+        r = octokit.Resource(None, name='Dummy', schema=schema)
+        self.assertEqual(r.name, 'octocat')
+
 if __name__ == '__main__':
     unittest.main()

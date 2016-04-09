@@ -35,7 +35,7 @@ class BaseClient(Resource):
         self.session = session
         self.url = api_endpoint
         self.schema = {}
-        self.name = 'Client'
+        self._name = 'Client'
         self.auto_paginate = False
 
         self.session.hooks = dict(response=self.response_callback)
