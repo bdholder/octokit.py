@@ -49,6 +49,9 @@ class Resource(object):
             value = self.schema.get(name, '__None__')
             if value != '__None__':
                 if type(value) in {dict, list}:
+                    # Smarter naming
+                    if type(value) == dict and 'type' in value:
+                        name = value['type']
                     return Resource(self.session, schema=value, name=humanize(name))
                 else:
                     return value
@@ -112,6 +115,7 @@ class Resource(object):
 
         self.schema = self.get().schema
 
+    # TODO: obsolete
     def parse_schema(self, response):
         """Parse the response and return its schema"""
         data_type = type(response)
@@ -126,6 +130,7 @@ class Resource(object):
 
         return schema
 
+    # TODO: obsolete
     def parse_schema_dict(self, data):
         """Convert the responses' JSON into a dictionary of resources"""
         schema = {}
@@ -149,6 +154,7 @@ class Resource(object):
 
         return schema
 
+    # TODO: obsolete
     def parse_schema_list(self, data, name):
         """Convert the responses' JSON into a list of resources"""
         return [
@@ -198,12 +204,24 @@ class Resource(object):
         *args          - Uri template argument
         **kwargs       – Uri template arguments
         """
+        # TODO: maybe remove method, url, params
+        request_params = {'method', 'url', 'headers', 'files', 'data', 'json', 'params', 'auth', 'cookies', 'hooks'}
         variables = self.variables()
         if len(args) == 1 and len(variables) == 1:
             kwargs[next(iter(variables))] = args[0]
 
-        url_args = {k: kwargs[k] for k in kwargs if k in variables}
-        req_args = {k: kwargs[k] for k in kwargs if k not in variables}
+        url_args = {}
+        params = kwargs.pop('params', {})
+        req_args = {}
+        for k in kwargs:
+            if k in variables:
+                url_args[k] = kwargs[k]
+            elif k in request_params:
+                req_args[k] = kwargs[k]
+            else:
+                params[k] = kwargs[k]
+
+        req_args['params'] = params
 
         url = uritemplate.expand(self.url, url_args)
         request = requests.Request(method, url, **req_args)
@@ -213,6 +231,6 @@ class Resource(object):
         return Resource(self.session, response=response,
                         name=humanize(self._name))
 
-    #TODO
+    #TODO: add docstring
     def refresh(self):
         self.schema = self.get().schema

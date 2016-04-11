@@ -18,6 +18,7 @@ fake_server_1.register_uri('GET', 'mock://api.com/', text=json.dumps(root))
 
 user_octocat = {}
 user_octocat['login'] = 'octocat'
+user_octocat['type'] = 'User'
 user_octocat['url'] = 'mock://api.com/users/octocat'
 
 user_gridbug = {}
@@ -164,6 +165,15 @@ class TestResourceUsage(unittest.TestCase):
         self.assertEqual(self.client.user_repositories_url, 'mock://api.com/users/{user}/repos{?type,page,per_page,sort}')
         r = self.client.user_repositories
         self.assertEqual(r.url, 'mock://api.com/users/{user}/repos')
+
+
+    def test_smart_naming(self):
+        repo = self.client.repository(owner='octocat', repo='Hello-World')
+        self.assertEqual(repo.owner.type, 'User')
+        self.assertEqual(repo.owner._name, 'User')
+
+
+    # TODO: automated testing for keyword routing to correct arguments
     
 
 if __name__ == '__main__':
