@@ -28,23 +28,46 @@ class Resource(object):
         self.rels = {}
 
         if response:
-            self.schema = self.parse_schema(response.json())
+            self.schema = response.json()
             self.rels = self.parse_rels(response)
             self.url = response.url
 
         if type(self.schema) == dict and 'url' in self.schema:
             self.url = self.schema['url']
 
+
+    def _parse_attribute(self, name):
+        if type(self.schema) == dict and type(name) == str:
+            # '__None__' returned because some attributes may actually be None
+            value = self.schema.get(name, '__None__')
+            if value != '__None__':
+                if type(value) in {dict, list}:
+                    return Resource(self.session, schema=value, name=humanize(name))
+                else:
+                    return value
+                
+            value = self.schema.get(name + '_url', '__None__')
+            if value != '__None__':
+                return Resource(self.session, url=value, name=humanize(name))
+                
+            raise AttributeError
+        elif type(self.schema) == list and type(name) == int:
+            # Assumption: lists always contain dicts
+            return Resource(self.session, schema=self.schema[name], name=humanize(singularize(self._name)))
+        else:
+            #TODO: better error messages
+            raise AttributeError
+
+
     def __getattr__(self, name):
         self.ensure_schema_loaded()
-        if name in self.schema:
-            return self.schema[name]
-        else:
-            raise AttributeError
+        return self._parse_attribute(name)
+
 
     def __getitem__(self, name):
         self.ensure_schema_loaded()
-        return self.schema[name]
+        return self._parse_attribute(name)
+
 
     def __call__(self, *args, **kwargs):
         return self.get(*args, **kwargs)
@@ -53,7 +76,7 @@ class Resource(object):
         self.ensure_schema_loaded()
         schema_type = type(self.schema)
         if schema_type == dict:
-            subtitle = ', '.join(self.schema.keys())
+            subtitle = ', '.join(self.schema.keys()) # becomes wrong for lazy parsing
         elif schema_type == list:
             subtitle = str(len(self.schema))
         else:
@@ -182,3 +205,7 @@ class Resource(object):
 
         return Resource(self.session, response=response,
                         name=humanize(self._name))
+
+    #TODO
+    def refresh(self):
+        self.schema = self.get().schema
