@@ -13,6 +13,7 @@ fake_server_1 = requests_mock.Adapter()
 
 root = {}
 root['repository_url'] = 'mock://api.com/repos/{owner}/{repo}'
+root['user_repositories_url'] = 'mock://api.com/users/{user}/repos{?type,page,per_page,sort}'
 fake_server_1.register_uri('GET', 'mock://api.com/', text=json.dumps(root))
 
 user_octocat = {}
@@ -156,7 +157,13 @@ class TestResourceUsage(unittest.TestCase):
         self.assertFalse(hasattr(issue, 'closed_by'))
         issue.refresh()
         self.assertTrue(hasattr(issue, 'closed_by'))
-        self.assertEqual(issue.closed_by.login, 'lich')        
+        self.assertEqual(issue.closed_by.login, 'lich')
+
+    
+    def test_uri_template_parameter_stripping(self):
+        self.assertEqual(self.client.user_repositories_url, 'mock://api.com/users/{user}/repos{?type,page,per_page,sort}')
+        r = self.client.user_repositories
+        self.assertEqual(r.url, 'mock://api.com/users/{user}/repos')
     
 
 if __name__ == '__main__':

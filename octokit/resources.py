@@ -20,6 +20,13 @@ class Resource(object):
 
     def __init__(self, session, name=None, url=None, schema=None,
                  response=None):
+        # strip URI template parameters
+        if url is not None:
+            # Assumption: the parameter templates are always at the end of the URI
+            index = url.find('{?')
+            if index != -1:
+                url = url[:index]
+
         self.session = session
         self._name = name
         self.url = url
@@ -76,7 +83,7 @@ class Resource(object):
         self.ensure_schema_loaded()
         schema_type = type(self.schema)
         if schema_type == dict:
-            subtitle = ', '.join(self.schema.keys()) # becomes wrong for lazy parsing
+            subtitle = ', '.join(self.schema.keys()) # wrong for lazy parsing, but maybe leave it
         elif schema_type == list:
             subtitle = str(len(self.schema))
         else:
