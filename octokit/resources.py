@@ -49,7 +49,7 @@ class Resource(object):
             value = self.schema.get(name, '__None__')
             if value != '__None__':
                 if type(value) in {dict, list}:
-                    # Smarter naming
+                    # Smarter naming of Resource
                     if type(value) == dict and 'type' in value:
                         name = value['type']
                     return Resource(self.session, schema=value, name=humanize(name))
@@ -58,7 +58,11 @@ class Resource(object):
                 
             value = self.schema.get(name + '_url', '__None__')
             if value != '__None__':
-                return Resource(self.session, url=value, name=humanize(name))
+                # Do not attempt to process non-HTTP URLs
+                if value[:6] == 'https:':
+                    return Resource(self.session, url=value, name=humanize(name))
+                else:
+                    return value
                 
             raise AttributeError
         elif type(self.schema) == list and type(name) == int:
@@ -84,7 +88,7 @@ class Resource(object):
 
     def __repr__(self):
         name = self._name
-        variables = self.variables()
+        variables = self.variables() if self.url else None
 
         if variables:
             name += ' template'

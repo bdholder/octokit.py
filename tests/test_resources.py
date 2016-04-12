@@ -9,8 +9,6 @@ import octokit
 import json
 
 
-fake_server_1 = requests_mock.Adapter()
-
 root = {}
 root['repository_url'] = 'https://api.github.com/repos/{owner}/{repo}'
 root['user_repositories_url'] = 'https://api.github.com/users/{user}/repos{?type,page,per_page,sort}'
@@ -19,31 +17,33 @@ root['user_url'] = 'https://api.github.com/users/{user}'
 user_octocat = {}
 user_octocat['login'] = 'octocat'
 user_octocat['type'] = 'User'
-user_octocat['url'] = 'mock://api.com/users/octocat'
+user_octocat['url'] = 'https://api.github.com/users/octocat'
 
 user_gridbug = {}
 user_gridbug['login'] = 'gridbug'
-user_gridbug['url'] = 'mock://api.com/users/gridbug'
+user_gridbug['url'] = 'https://api.github.com/users/gridbug'
 
 user_lich = {}
 user_lich['login'] = 'lich'
-user_lich['url'] = 'mock://api.com/users/lich'
+user_lich['url'] = 'https://api.github.com/users/lich'
 
 repo_1 = {}
+repo_1['git_url'] = 'git:github.com/octocat/Hello-World.git'
+repo_1['issues_url'] = 'https://api.github.com/repos/octocat/Hello-World/issues{/number}'
 repo_1['name'] = 'Hello-World'
 repo_1['owner'] = user_octocat
-repo_1['issues_url'] = 'https://api.github.com/repos/octocat/Hello-World/issues{/number}'
+repo_1['permissions'] = {'admin': False, 'push': False, 'pull': True}
+repo_1['ssh_url'] = 'git@github.com:octocat/Hello-World.git'
 repo_1['url'] = 'https://api.github.com/repos/octocat/Hello-World'
-#fake_server_1.register_uri('GET', repo_1['url'], text=json.dumps(repo_1))
 
 issue1 = {}
 issue1['state'] = 'open'
-issue1['url'] = 'mock://api.com/repos/octocat/Hello-World/issues/1'
+issue1['url'] = 'https://api.github.com/repos/octocat/Hello-World/issues/1'
 issue1['user'] = user_gridbug
 
 issue2_part = {}
 issue2_part['state'] = 'closed'
-issue2_part['url'] = 'mock://api.com/repos/octocat/Hello-World/issues/2'
+issue2_part['url'] = 'https://api.github.com/repos/octocat/Hello-World/issues/2'
 issue2_part['user'] = user_gridbug
 
 issue2 = dict(issue2_part)
@@ -94,19 +94,6 @@ class TestResources(unittest.TestCase):
             # test named param inference
             response = method('foo')
             assert response.success
-
-
-    def test_schema_key_aliasing(self):
-        """Test Resource whether attributes alias schema keys."""
-        try:
-            self.client.name
-            self.fail(msg="No exception raised when accessing Client.name")
-        except Exception as e:
-            self.assertEqual(e.args[0], "You need to call this resource with variables ['param']")
-
-        schema = {'name': 'octocat'}
-        r = octokit.Resource(None, name='Dummy', schema=schema)
-        self.assertEqual(r.name, 'octocat')
 
 
 @requests_mock.mock()
@@ -180,10 +167,10 @@ class TestResourceUsage(unittest.TestCase):
     def test_ensure_schema_loaded_exception(self, m):
         """Test that ensure_schema_loaded raises correct exception."""
         m.get('https://api.github.com', json=root)
-        client = octokit.Client()
+
         try:
             #.id necessary to force accessing resource
-            client.user.id
+            self.client.user.id
         except Exception as e:
             self.assertNotIsInstance(e, NameError)
             self.assertEqual(e.args[0], "You need to call this resource with variables ['user']")
@@ -195,6 +182,43 @@ class TestResourceUsage(unittest.TestCase):
 
         x = self.client.user_repositories(user='octocat', page=2, headers={'custom-header': '42'})
         self.assertEqual(x.url, 'https://api.github.com/users/octocat/repos?page=2')
+
+
+    def test_schema_key_aliasing(self, m):
+        """Test Resource whether attributes alias schema keys."""
+        m.get('https://api.github.com', json=root)
+        m.get('https://api.github.com/repos/octocat/Hello-World', json=repo_1)
+
+        try:
+            self.client.name
+            self.fail(msg="No exception raised when accessing Client.name")
+        except Exception as e:
+            self.assertIsInstance(e, octokit.exceptions.NotFound)
+
+        repo = self.client.repository(owner='octocat', repo='Hello-World')
+        self.assertEqual(repo.name, 'Hello-World')
+
+
+    def test_non_https_uri_scheme(self, m):
+        '''Test that non-HTTPS URI schemes are not processed into Resources.'''
+        m.get('https://api.github.com', json=root)
+        m.get('https://api.github.com/repos/octocat/Hello-World', json=repo_1)
+
+        repo = self.client.repository(owner='octocat', repo='Hello-World')
+        self.assertEqual(repo.git, repo_1['git_url'])
+        self.assertEqual(repo.ssh, repo_1['ssh_url'])
+
+
+    def test_schemas_without_url(self, m):
+        '''Test that a schema without a URL does not break __repr__.'''
+        m.get('https://api.github.com', json=root)
+        m.get('https://api.github.com/repos/octocat/Hello-World', json=repo_1)
+
+        repo = self.client.repository(owner='octocat', repo='Hello-World')
+        try:
+            repo.permissions.__repr__()
+        except:
+            self.fail(msg='Exception raise after __repr__ call.')
 
 
 if __name__ == '__main__':
