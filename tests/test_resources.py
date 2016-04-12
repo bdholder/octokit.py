@@ -12,9 +12,9 @@ import json
 fake_server_1 = requests_mock.Adapter()
 
 root = {}
-root['repository_url'] = 'mock://api.com/repos/{owner}/{repo}'
-root['user_repositories_url'] = 'mock://api.com/users/{user}/repos{?type,page,per_page,sort}'
-fake_server_1.register_uri('GET', 'mock://api.com/', text=json.dumps(root))
+root['repository_url'] = 'https://api.github.com/repos/{owner}/{repo}'
+root['user_repositories_url'] = 'https://api.github.com/users/{user}/repos{?type,page,per_page,sort}'
+root['user_url'] = 'https://api.github.com/users/{user}'
 
 user_octocat = {}
 user_octocat['login'] = 'octocat'
@@ -32,28 +32,23 @@ user_lich['url'] = 'mock://api.com/users/lich'
 repo_1 = {}
 repo_1['name'] = 'Hello-World'
 repo_1['owner'] = user_octocat
-repo_1['issues_url'] = 'mock://api.com/repos/octocat/Hello-World/issues{/number}'
-repo_1['url'] = 'mock://api.com/repos/octocat/Hello-World'
-fake_server_1.register_uri('GET', repo_1['url'], text=json.dumps(repo_1))
+repo_1['issues_url'] = 'https://api.github.com/repos/octocat/Hello-World/issues{/number}'
+repo_1['url'] = 'https://api.github.com/repos/octocat/Hello-World'
+#fake_server_1.register_uri('GET', repo_1['url'], text=json.dumps(repo_1))
 
 issue1 = {}
 issue1['state'] = 'open'
 issue1['url'] = 'mock://api.com/repos/octocat/Hello-World/issues/1'
 issue1['user'] = user_gridbug
 
-issue2_partial = {}
-issue2_partial['state'] = 'closed'
-issue2_partial['url'] = 'mock://api.com/repos/octocat/Hello-World/issues/2'
-issue2_partial['user'] = user_gridbug
+issue2_part = {}
+issue2_part['state'] = 'closed'
+issue2_part['url'] = 'mock://api.com/repos/octocat/Hello-World/issues/2'
+issue2_part['user'] = user_gridbug
 
-issue2 = dict(issue2_partial)
+issue2 = dict(issue2_part)
 issue2['closed_by'] = user_lich
-fake_server_1.register_uri('GET', issue2['url'], text=json.dumps(issue2))
 
-fake_server_1.register_uri('GET', 'mock://api.com/repos/octocat/Hello-World/issues',
-                                  text=json.dumps([issue1]))
-fake_server_1.register_uri('GET', 'mock://api.com/repos/octocat/Hello-World/issues?state=all',
-                                  text=json.dumps([issue1, issue2_partial]))
 
 
 
@@ -100,21 +95,12 @@ class TestResources(unittest.TestCase):
             response = method('foo')
             assert response.success
 
-    def test_ensure_schema_loaded_exception(self):
-        """Test that ensure_schema_loaded raises correct exception."""
-        client = octokit.Client()
-        try:
-            #.id necessary to force accessing resource
-            client.user.id
-        except Exception as e:
-            self.assertNotIsInstance(e, NameError)
-            self.assertEqual(e.args[0], "You need to call this resource with variables ['user']")
 
     def test_schema_key_aliasing(self):
         """Test Resource whether attributes alias schema keys."""
         try:
             self.client.name
-            self.assertTrue(False, msg="No exception raised when accessing Client.name")
+            self.fail(msg="No exception raised when accessing Client.name")
         except Exception as e:
             self.assertEqual(e.args[0], "You need to call this resource with variables ['param']")
 
@@ -123,24 +109,31 @@ class TestResources(unittest.TestCase):
         self.assertEqual(r.name, 'octocat')
 
 
+@requests_mock.mock()
 class TestResourceUsage(unittest.TestCase):
     def setUp(self):
-        self.client = octokit.Client(api_endpoint='mock://api.com/')
-        self.client.session.mount('mock', fake_server_1)
+        self.client = octokit.Client()
+    
 
-
-    def test_client_initialization(self):
+    def test_client_initialization(self, m):
         self.assertEqual(self.client.schema, {})
 
 
-    def test_lazy_parsing(self):
+    def test_lazy_parsing(self, m):
+        m.get('https://api.github.com', json=root)
+        m.get('https://api.github.com/repos/octocat/Hello-World', json=repo_1)
+
         repo = self.client.repository(owner='octocat', repo='Hello-World')
         self.assertNotEqual(repo.schema, {})
         self.assertIs(type(repo.schema['owner']), dict)
         self.assertIsInstance(repo.owner, octokit.Resource)
         
 
-    def test_chained_dots(self):
+    def test_chained_dots(self, m):
+        m.get('https://api.github.com', json=root)
+        m.get('https://api.github.com/repos/octocat/Hello-World', json=repo_1)
+        m.get('https://api.github.com/repos/octocat/Hello-World/issues', json=[issue1])
+
         repo = self.client.repository(owner='octocat', repo='Hello-World')
         issues = repo.issues()
         issue0 = issues[0]
@@ -148,11 +141,16 @@ class TestResourceUsage(unittest.TestCase):
         self.assertEqual(issue0.user.login, 'gridbug')
 
 
-    def test_refresh(self):
-        # Necessary because requests_mock does not handle parameters correctly
-        issues = octokit.Resource(self.client.session, name='Issues',
-                                  url='mock://api.com/repos/octocat/Hello-World/issues?state=all')
-        issues.refresh()
+    def test_refresh(self, m):
+        m.get('https://api.github.com', json=root)
+        m.get(repo_1['url'], json=repo_1)
+        m.get('https://api.github.com/repos/octocat/Hello-World/issues', json=[issue1])
+        m.get('https://api.github.com/repos/octocat/Hello-World/issues?state=all', json=[issue1, issue2_part])
+        m.get(issue2['url'], json=issue2)
+
+        repo = self.client.repository(owner='octocat', repo='Hello-World')
+        issues = repo.issues(state='all')
+        self.assertEqual(issues.url, 'https://api.github.com/repos/octocat/Hello-World/issues?state=all')
         issue = issues[1]
         self.assertTrue(issue.state, 'closed')
         self.assertFalse(hasattr(issue, 'closed_by'))
@@ -161,20 +159,43 @@ class TestResourceUsage(unittest.TestCase):
         self.assertEqual(issue.closed_by.login, 'lich')
 
     
-    def test_uri_template_parameter_stripping(self):
-        self.assertEqual(self.client.user_repositories_url, 'mock://api.com/users/{user}/repos{?type,page,per_page,sort}')
+    def test_uri_template_parameter_stripping(self, m):
+        m.get('https://api.github.com', json=root)
+
+        self.assertEqual(self.client.user_repositories_url,
+                         'https://api.github.com/users/{user}/repos{?type,page,per_page,sort}')
         r = self.client.user_repositories
-        self.assertEqual(r.url, 'mock://api.com/users/{user}/repos')
+        self.assertEqual(r.url, 'https://api.github.com/users/{user}/repos')
 
 
-    def test_smart_naming(self):
+    def test_smart_naming(self, m):
+        m.get('https://api.github.com', json=root)
+        m.get('https://api.github.com/repos/octocat/Hello-World', json=repo_1)
+
         repo = self.client.repository(owner='octocat', repo='Hello-World')
         self.assertEqual(repo.owner.type, 'User')
         self.assertEqual(repo.owner._name, 'User')
 
 
-    # TODO: automated testing for keyword routing to correct arguments
-    
+    def test_ensure_schema_loaded_exception(self, m):
+        """Test that ensure_schema_loaded raises correct exception."""
+        m.get('https://api.github.com', json=root)
+        client = octokit.Client()
+        try:
+            #.id necessary to force accessing resource
+            client.user.id
+        except Exception as e:
+            self.assertNotIsInstance(e, NameError)
+            self.assertEqual(e.args[0], "You need to call this resource with variables ['user']")
+
+
+    def test_keyword_routing(self, m):
+        m.get('https://api.github.com', json=root)
+        m.get('https://api.github.com/users/octocat/repos?page=2', json={})
+
+        x = self.client.user_repositories(user='octocat', page=2, headers={'custom-header': '42'})
+        self.assertEqual(x.url, 'https://api.github.com/users/octocat/repos?page=2')
+
 
 if __name__ == '__main__':
     unittest.main()

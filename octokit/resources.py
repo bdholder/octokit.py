@@ -83,16 +83,23 @@ class Resource(object):
         return self.get(*args, **kwargs)
 
     def __repr__(self):
-        self.ensure_schema_loaded()
-        schema_type = type(self.schema)
-        if schema_type == dict:
-            subtitle = ', '.join(self.schema.keys()) # wrong for lazy parsing, but maybe leave it
-        elif schema_type == list:
-            subtitle = str(len(self.schema))
-        else:
-            subtitle = str(self.schema)
+        name = self._name
+        variables = self.variables()
 
-        return '<Octokit %s(%s)>' % (self._name, subtitle)
+        if variables:
+            name += ' template'
+            subtitle = ', '.join(variables)
+        else:
+            self.ensure_schema_loaded()
+            schema_type = type(self.schema)
+            if schema_type == dict:
+                subtitle = ', '.join(self.schema.keys()) # (bdholder): wrong for lazy parsing, but maybe leave it
+            elif schema_type == list:
+                subtitle = str(len(self.schema))
+            else:
+                subtitle = str(self.schema)
+
+        return '<Octokit %s(%s)>' % (name, subtitle)
 
     def variables(self):
         """Returns the variables the URI takes"""
@@ -115,7 +122,7 @@ class Resource(object):
 
         self.schema = self.get().schema
 
-    # TODO: obsolete
+    # TODO (bdholder) -- obsolete
     def parse_schema(self, response):
         """Parse the response and return its schema"""
         data_type = type(response)
@@ -130,7 +137,7 @@ class Resource(object):
 
         return schema
 
-    # TODO: obsolete
+    # TODO (bdholder) -- obsolete
     def parse_schema_dict(self, data):
         """Convert the responses' JSON into a dictionary of resources"""
         schema = {}
@@ -154,7 +161,7 @@ class Resource(object):
 
         return schema
 
-    # TODO: obsolete
+    # TODO (bdholder) -- obsolete
     def parse_schema_list(self, data, name):
         """Convert the responses' JSON into a list of resources"""
         return [
@@ -204,7 +211,7 @@ class Resource(object):
         *args          - Uri template argument
         **kwargs       – Uri template arguments
         """
-        # TODO: maybe remove method, url, params
+        # TODO (bdholder) -- maybe remove method, url, params
         request_params = {'method', 'url', 'headers', 'files', 'data', 'json', 'params', 'auth', 'cookies', 'hooks'}
         variables = self.variables()
         if len(args) == 1 and len(variables) == 1:
@@ -231,6 +238,6 @@ class Resource(object):
         return Resource(self.session, response=response,
                         name=humanize(self._name))
 
-    #TODO: add docstring
+    #TODO (bdholder) -- add docstring, maybe a better name. sync?
     def refresh(self):
         self.schema = self.get().schema
