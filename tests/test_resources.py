@@ -1,12 +1,11 @@
 import os
 import unittest
 
-import requests_mock
+import json
+import requests, requests_mock
 import uritemplate
 
 import octokit
-
-import json
 
 
 root = {}
@@ -48,8 +47,6 @@ issue2_part['user'] = user_gridbug
 
 issue2 = dict(issue2_part)
 issue2['closed_by'] = user_lich
-
-
 
 
 class TestResources(unittest.TestCase):
@@ -144,15 +141,6 @@ class TestResourceUsage(unittest.TestCase):
         issue.refresh()
         self.assertTrue(hasattr(issue, 'closed_by'))
         self.assertEqual(issue.closed_by.login, 'lich')
-
-    
-    def test_uri_template_parameter_stripping(self, m):
-        m.get('https://api.github.com', json=root)
-
-        self.assertEqual(self.client.user_repositories_url,
-                         'https://api.github.com/users/{user}/repos{?type,page,per_page,sort}')
-        r = self.client.user_repositories
-        self.assertEqual(r.url, 'https://api.github.com/users/{user}/repos')
 
 
     def test_smart_naming(self, m):

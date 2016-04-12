@@ -12,6 +12,9 @@ import requests
 import uritemplate
 
 
+_requests_keywords = {'method', 'url', 'headers', 'files', 'data', 'json', 'params', 'auth', 'cookies', 'hooks'}
+
+
 class Resource(object):
     """The workhorse of octokit.py, this class makes the API calls and
     interprets them into an accessible schema. The API calls and schema parsing
@@ -20,13 +23,6 @@ class Resource(object):
 
     def __init__(self, session, name=None, url=None, schema=None,
                  response=None):
-        # strip URI template parameters
-        if url is not None:
-            # Assumption: the parameter templates are always at the end of the URI
-            index = url.find('{?')
-            if index != -1:
-                url = url[:index]
-
         self.session = session
         self._name = name
         self.url = url
@@ -88,7 +84,7 @@ class Resource(object):
 
     def __repr__(self):
         name = self._name
-        variables = self.variables() if self.url else None
+        variables = self.variables()
 
         if variables:
             name += ' template'
@@ -107,7 +103,7 @@ class Resource(object):
 
     def variables(self):
         """Returns the variables the URI takes"""
-        return uritemplate.variables(self.url)
+        return uritemplate.variables(self.url) if self.url else set()
 
     def keys(self):
         """Returns the links this resource can follow"""
@@ -215,27 +211,34 @@ class Resource(object):
         *args          - Uri template argument
         **kwargs       – Uri template arguments
         """
-        # TODO (bdholder) -- maybe remove method, url, params
-        request_params = {'method', 'url', 'headers', 'files', 'data', 'json', 'params', 'auth', 'cookies', 'hooks'}
+        # Process requests keywords
+        kwargs.pop('method', None)
+        req_args = {}
+        # Allow URL overriding
+        req_args['url'] = kwargs.pop('url', self.url)
+        for key in _requests_keywords:
+            if key in kwargs:
+                req_args[key] = kwargs.pop(key)
+
+        # Expand all URI variables
+        url_args = {}
         variables = self.variables()
         if len(args) == 1 and len(variables) == 1:
-            kwargs[next(iter(variables))] = args[0]
+            url_args[next(iter(variables))] = args[0]
+        else:
+            for key in variables:
+                url_args[key] = kwargs.pop(key, None)
+        req_args['url'] = uritemplate.expand(req_args['url'], url_args)
 
-        url_args = {}
-        params = kwargs.pop('params', {})
-        req_args = {}
-        for k in kwargs:
-            if k in variables:
-                url_args[k] = kwargs[k]
-            elif k in request_params:
-                req_args[k] = kwargs[k]
-            else:
-                params[k] = kwargs[k]
+        '''
+        If there are any keyword arguments left, assume they are parameters
+        if method is GET, otherwise throw them away.
+        '''
+        if method == 'GET':
+            params = req_args.setdefault('params', {})
+            params.update(kwargs)
 
-        req_args['params'] = params
-
-        url = uritemplate.expand(self.url, url_args)
-        request = requests.Request(method, url, **req_args)
+        request = requests.Request(method, **req_args)
         prepared_req = self.session.prepare_request(request)
         response = self.session.send(prepared_req)
 
