@@ -31,7 +31,8 @@ class Resource(object):
         self.rels = {}
 
         if response:
-            self.schema = response.json()
+            if response.content:
+                self.schema = response.json()
             self.rels = self.parse_rels(response)
             self.url = response.url
 
