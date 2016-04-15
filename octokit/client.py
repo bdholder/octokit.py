@@ -32,10 +32,8 @@ class BaseClient(Resource):
 
     def __init__(self, session=requests.Session(),
                  api_endpoint='https://api.github.com', **kwargs):
-        self.session = session
-        self.url = api_endpoint
-        self.schema = {}
-        self._name = 'Client'
+        super(BaseClient, self).__init__(session, name='Client', url=api_endpoint, schema={})
+
         self.auto_paginate = False
 
         self.session.hooks = dict(response=self.response_callback)

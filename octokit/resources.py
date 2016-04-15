@@ -23,6 +23,7 @@ class Resource(object):
 
     def __init__(self, session, name=None, url=None, schema=None,
                  response=None):
+        self.etag = None
         self.session = session
         self._name = name
         self.url = url
@@ -35,6 +36,7 @@ class Resource(object):
                 self.schema = response.json()
             self.rels = self.parse_rels(response)
             self.url = response.url
+            self.etag = response.headers.get('ETag')
 
         if type(self.schema) == dict and 'url' in self.schema:
             self.url = self.schema['url']
@@ -122,8 +124,8 @@ class Resource(object):
             raise Exception("You need to call this resource with variables %s"
                             % repr(list(variables)))
 
-        self.schema = self.get().schema
-
+        self.sync()
+        
 
     def parse_rels(self, response):
         """Parse relation links from the headers"""
@@ -194,6 +196,10 @@ class Resource(object):
             params = req_args.setdefault('params', {})
             params.update(kwargs)
 
+        # If there is an ETag, add it to outgoing headers
+        headers = req_args.setdefault('headers', {})
+        headers['If-None-Match'] = self.etag
+
         request = requests.Request(method, **req_args)
         prepared_req = self.session.prepare_request(request)
         response = self.session.send(prepared_req)
@@ -201,6 +207,18 @@ class Resource(object):
         return Resource(self.session, response=response,
                         name=humanize(self._name))
 
-    #TODO (bdholder) -- add docstring, maybe a better name. sync?
-    def refresh(self):
-        self.schema = self.get().schema
+
+    #TODO (bdholder) -- add docstring, add error handling for bad requests
+    def sync(self):
+        resource = self.get()
+        response = resource.response
+
+        self.response = response
+
+        assert resource.response.status_code < 400
+
+        self.etag = response.headers.get('ETag')
+        # Schema will be empty if response was 304, so don't smash ours
+        if resource.response.status_code != 304:
+            self.schema = resource.schema
+            self.rels = resource.rels

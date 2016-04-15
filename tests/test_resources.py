@@ -49,6 +49,21 @@ issue2 = dict(issue2_part)
 issue2['closed_by'] = user_lich
 
 
+def etag_matcher(request):
+    if not (request.method == 'GET' and request.url == 'https://api.github.com/repos/octocat/Hello-World'):
+        return None
+
+    response = requests.Response()
+
+    etag = request.headers.get('If-None-Match')
+    if etag and etag == 'W/"123"':
+        response.status_code = 304
+    else:
+        response.status_code = 200
+
+    return response
+
+
 class TestResources(unittest.TestCase):
     """Tests the functionality in octokit/resources.py"""
 
@@ -125,7 +140,7 @@ class TestResourceUsage(unittest.TestCase):
         self.assertEqual(issue0.user.login, 'gridbug')
 
 
-    def test_refresh(self, m):
+    def test_sync(self, m):
         m.get('https://api.github.com', json=root)
         m.get(repo_1['url'], json=repo_1)
         m.get('https://api.github.com/repos/octocat/Hello-World/issues', json=[issue1])
@@ -138,7 +153,7 @@ class TestResourceUsage(unittest.TestCase):
         issue = issues[1]
         self.assertTrue(issue.state, 'closed')
         self.assertFalse(hasattr(issue, 'closed_by'))
-        issue.refresh()
+        issue.sync()
         self.assertTrue(hasattr(issue, 'closed_by'))
         self.assertEqual(issue.closed_by.login, 'lich')
 
@@ -207,6 +222,18 @@ class TestResourceUsage(unittest.TestCase):
             repo.permissions.__repr__()
         except:
             self.fail(msg='Exception raise after __repr__ call.')
+
+    
+    def test_resource_etag_usage(self, m):
+        m.get('https://api.github.com', json=root)
+        m.get('https://api.github.com/repos/octocat/Hello-World', json=repo_1, headers={'ETag': 'W/"123"'})
+        
+        repo = self.client.repository(owner='octocat', repo='Hello-World')
+
+        m.add_matcher(etag_matcher)
+
+        repo.sync()
+        self.assertEqual(repo.response.status_code, 304)
 
 
 if __name__ == '__main__':
