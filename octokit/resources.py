@@ -41,10 +41,10 @@ class Resource(object):
 
 
     def _parse_attribute(self, name):
+        '''Package the requested attribute into a Resource if possible.'''
         if type(self.schema) == dict and type(name) == str:
-            # '__None__' returned because some attributes may actually be None
-            value = self.schema.get(name, '__None__')
-            if value != '__None__':
+            if name in self.schema:
+                value = self.schema[name]
                 if type(value) in {dict, list}:
                     # Smarter naming of Resource
                     if type(value) == dict and 'type' in value:
@@ -52,16 +52,17 @@ class Resource(object):
                     return Resource(self.session, schema=value, name=humanize(name))
                 else:
                     return value
-                
-            value = self.schema.get(name + '_url', '__None__')
-            if value != '__None__':
+            
+            elif name + '_url' in self.schema:
+                value = self.schema[name + '_url']
                 # Do not attempt to process non-HTTP URLs
-                if value[:6] == 'https:':
+                if value[:5] == 'https':
                     return Resource(self.session, url=value, name=humanize(name))
                 else:
                     return value
                 
             raise AttributeError
+
         elif type(self.schema) == list and type(name) == int:
             # Assumption: lists always contain dicts
             return Resource(self.session, schema=self.schema[name], name=humanize(singularize(self._name)))
@@ -94,7 +95,7 @@ class Resource(object):
             self.ensure_schema_loaded()
             schema_type = type(self.schema)
             if schema_type == dict:
-                subtitle = ', '.join(self.schema.keys()) # (bdholder): wrong for lazy parsing, but maybe leave it
+                subtitle = ', '.join(self.schema.keys())
             elif schema_type == list:
                 subtitle = str(len(self.schema))
             else:
@@ -123,52 +124,6 @@ class Resource(object):
 
         self.schema = self.get().schema
 
-    # TODO (bdholder) -- obsolete
-    def parse_schema(self, response):
-        """Parse the response and return its schema"""
-        data_type = type(response)
-
-        if data_type == dict:
-            schema = self.parse_schema_dict(response)
-        elif data_type == list:
-            schema = self.parse_schema_list(response, self._name)
-        else:
-            # TODO (eduardo) -- handle request that don't return anything
-            raise Exception("Unknown type of response from the API.")
-
-        return schema
-
-    # TODO (bdholder) -- obsolete
-    def parse_schema_dict(self, data):
-        """Convert the responses' JSON into a dictionary of resources"""
-        schema = {}
-        for key in data:
-            name = key.split('_url')[0]
-            if key.endswith('_url'):
-                if data[key]:
-                    schema[name] = Resource(self.session, url=data[key],
-                                            name=humanize(name))
-                else:
-                    schema[name] = data[key]
-            else:
-                data_type = type(data[key])
-                if data_type == dict:
-                    schema[name] = Resource(self.session, schema=data[key],
-                                            name=humanize(name))
-                elif data_type == list:
-                    schema[name] = self.parse_schema_list(data[key], name=name)
-                else:
-                    schema[name] = data[key]
-
-        return schema
-
-    # TODO (bdholder) -- obsolete
-    def parse_schema_list(self, data, name):
-        """Convert the responses' JSON into a list of resources"""
-        return [
-          Resource(self.session, schema=s, name=humanize(singularize(name)))
-          for s in data
-        ]
 
     def parse_rels(self, response):
         """Parse relation links from the headers"""
